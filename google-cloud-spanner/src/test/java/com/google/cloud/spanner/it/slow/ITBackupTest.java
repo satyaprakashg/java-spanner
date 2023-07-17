@@ -102,6 +102,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.junit.runners.MethodSorters;
+import org.threeten.bp.Duration;
 
 /**
  * Integration tests creating, reading, updating and deleting backups. This test class combines
@@ -362,6 +363,7 @@ public class ITBackupTest {
     testGetBackup(database, backupId, expireTime);
     testUpdateBackup(backup);
     testCreateInvalidExpirationDate(database);
+    testDefaultRetentionPeriodFeature(database);
     testRestore(backup, versionTime, keyName);
 
     testCancelBackupOperation(database);
@@ -637,6 +639,24 @@ public class ITBackupTest {
     ExecutionException executionException = assertThrows(ExecutionException.class, op::get);
     Throwable cause = executionException.getCause();
     assertEquals(SpannerException.class, cause.getClass());
+    SpannerException spannerException = (SpannerException) cause;
+    assertEquals(ErrorCode.INVALID_ARGUMENT, spannerException.getErrorCode());
+  }
+
+  private void testDefaultRetentionPeriodFeature(Database database) {
+    testCreateBackupWithNullExpirationTime(database);
+  }
+
+  private void testCreateBackupWithNullExpirationTime(Database database) {
+    String backupId = testHelper.getUniqueBackupId();
+    logger.info(String.format("Creating backup %s with null expiration time", backupId));
+    OperationFuture<Backup, CreateBackupMetadata> op =
+        dbAdminClient.createBackup(instanceId, backupId, database.getId().getDatabase(),
+            null);
+    backups.add(backupId);
+    ExecutionException executionException =
+        assertThrows(ExecutionException.class, op::get);
+    Throwable cause = executionException.getCause();
     SpannerException spannerException = (SpannerException) cause;
     assertEquals(ErrorCode.INVALID_ARGUMENT, spannerException.getErrorCode());
   }
