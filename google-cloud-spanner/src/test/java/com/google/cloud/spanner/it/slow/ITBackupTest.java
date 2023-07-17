@@ -62,6 +62,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Iterables;
 import com.google.longrunning.Operation;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.spanner.admin.database.v1.CopyBackupMetadata;
 import com.google.spanner.admin.database.v1.CreateBackupMetadata;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
 import com.google.spanner.admin.database.v1.RestoreDatabaseMetadata;
@@ -645,6 +646,7 @@ public class ITBackupTest {
 
   private void testDefaultRetentionPeriodFeature(Database database) {
     testCreateBackupWithNullExpirationTime(database);
+    testCopyBackupWithNullExpirationTime(database);
   }
 
   private void testCreateBackupWithNullExpirationTime(Database database) {
@@ -659,6 +661,29 @@ public class ITBackupTest {
     Throwable cause = executionException.getCause();
     SpannerException spannerException = (SpannerException) cause;
     assertEquals(ErrorCode.INVALID_ARGUMENT, spannerException.getErrorCode());
+  }
+
+  private void testCopyBackupWithNullExpirationTime(Database database) {
+    String srcBackupId = testHelper.getUniqueBackupId();
+    String dstBackupId = testHelper.getUniqueBackupId();
+    Timestamp expireTime = afterDays(7);
+    OperationFuture<Backup, CreateBackupMetadata> createOp =
+        dbAdminClient.createBackup(instanceId, srcBackupId, database.getId().getDatabase(),
+            expireTime);
+    backups.add(srcBackupId);
+    try {
+      Backup srcBackup = createOp.get(BACKUP_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+      logger.info(String.format("Copying backup %s with null expiration time", srcBackupId));
+      OperationFuture<Backup, CopyBackupMetadata> copyOp =
+          dbAdminClient.copyBackup(instanceId, srcBackupId, dstBackupId, null);
+      ExecutionException executionException =
+          assertThrows(ExecutionException.class, copyOp::get);
+      Throwable cause = executionException.getCause();
+      SpannerException spannerException = (SpannerException) cause;
+      assertEquals(ErrorCode.INVALID_ARGUMENT, spannerException.getErrorCode());
+    } catch (Exception e) {
+      logger.info(String.format("Create backup failed with exception %s", e.toString()));
+    }
   }
 
   private void testCancelBackupOperation(Database database)
